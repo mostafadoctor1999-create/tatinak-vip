@@ -5,7 +5,7 @@ import { SB_READY, sbList, sbInsert, sbSetStatus } from "./supabase.js";
 
 /* ============ البيانات ============ */
 const MINYA = { lat: 28.11, lon: 30.75 };
-const GEO_GATE = true; // false = الموقع بيفتح بس لما العميل يكون قريب من السفينة
+const GEO_GATE = false; // false = الموقع بيفتح بس لما العميل يكون قريب من السفينة
 const CAFE_RADIUS = 300; // بالمتر
 const HERO_IMAGE = ""; // ضع هنا رابط صورة حقيقية للمكان (من صاحب المطعم) وهتظهر خلفية للرئيسية
 const TABLE = "طاولة النيل 04";
