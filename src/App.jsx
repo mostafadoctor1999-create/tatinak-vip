@@ -3,6 +3,7 @@ import { Ship, Sparkles, Send, Bell, Receipt, Lock, Star, Plus, Minus, Home, Mes
 
 /* ============ البيانات ============ */
 const MINYA = { lat: 28.11, lon: 30.75 };
+const HERO_IMAGE = ""; // ضع هنا رابط صورة حقيقية للمكان (من صاحب المطعم) وهتظهر خلفية للرئيسية
 const TABLE = "طاولة النيل 04";
 const VAULT_PIN = "1234"; // تجريبي
 const MENU = {
@@ -137,6 +138,9 @@ function ShipHeader({ mode, temp }) {
   return (
     <div className={`relative overflow-hidden rounded-b-[2.5rem] bg-gradient-to-b ${sky} pt-8 pb-20 px-5`}>
       <div className="absolute top-16 right-8 w-28 h-28 rounded-full blur-2xl opacity-50" style={{ background: orb }} />
+      {HERO_IMAGE && <img src={HERO_IMAGE} alt="" className="absolute inset-0 w-full h-full object-cover opacity-30" />}
+      <div className="absolute inset-0 opacity-60" style={{ backgroundImage: PATTERN }} />
+      <GoldParticles />
       <div className="flex items-center justify-between relative z-10">
         <div className="flex items-center gap-2">
           <Crown className="text-[#D4AF37]" size={20} />
@@ -145,6 +149,7 @@ function ShipHeader({ mode, temp }) {
         <span className="glass rounded-full px-3 py-1 text-xs text-[#D4AF37]">{TABLE}</span>
       </div>
       <div className="relative z-10 flex flex-col items-center mt-4 bob">
+        <div className="absolute w-72 h-72 rounded-full border border-[#D4AF37]/20 halo" />
         <svg viewBox="0 0 260 120" className="w-72 drop-shadow-[0_0_22px_rgba(212,175,55,.35)]">
           <defs>
             <linearGradient id="goldHull" x1="0" x2="1">
@@ -236,6 +241,7 @@ function App({ profile }) {
   return (
     <>
       <style>{STYLES}</style>
+      <style>{FX_CSS}</style>
       <div dir="rtl" className="min-h-screen max-w-md mx-auto bg-[#0A0A0A] text-white relative pb-32">
         {tab === "home" && (
           <div className="fade-up">
@@ -254,7 +260,7 @@ function App({ profile }) {
                 </div>
               )}
               {/* عداد الغروب */}
-              <div className="glass rounded-2xl p-4 flex items-center gap-3 mb-4">
+              <div className="glass rounded-2xl p-4 flex items-center gap-3 mb-4 relative overflow-hidden"><SailBoat />
                 {mode === "sunset" ? <Sunset className="text-[#D4AF37]" /> : period === "morning" ? <Sunrise className="text-[#D4AF37]" /> : <Moon className="text-[#D4AF37]" />}
                 <div className="flex-1">
                   <p className="text-sm font-bold">
@@ -283,7 +289,7 @@ function App({ profile }) {
               </h3>
               <div className="flex flex-col gap-3 mb-5">
                 {items.map((item, idx) => (
-                  <div key={item.id} className="glass rounded-2xl p-4 flex justify-between items-center fade-up" style={{ animationDelay: `${idx * 90}ms` }}>
+                  <div key={item.id} className="glass item-card rounded-2xl p-4 flex justify-between items-center fade-up" style={{ animationDelay: `${idx * 90}ms` }}>
                     <div className="pl-3">
                       <h3 className="font-bold">{item.name}</h3>
                       <p className="text-xs text-white/60 mt-1">{item.desc}</p>
@@ -480,6 +486,7 @@ function CardScreen({ card, onIssue, stats }) {
         <>
           <div className={`relative w-full aspect-[1.6] rounded-3xl p-5 bg-gradient-to-br ${tier.grad} shadow-[0_20px_60px_rgba(212,175,55,.25)] overflow-hidden fade-up`}>
             <div className="sheen absolute inset-0 opacity-70" />
+            <div className="holo absolute inset-0" />
             <div className="relative flex justify-between items-start text-black/80">
               <span className="font-black">تاتينيك</span>
               <Crown size={22} />
@@ -798,5 +805,68 @@ function OffersBox({ profile, stats, enabled, setEnabled }) {
 /* ============ الجذر: تسجيل أولاً ثم التطبيق ============ */
 export default function Root() {
   const [profile, setProfile] = useState(null);
-  return profile ? <App profile={profile} /> : <RegisterScreen onDone={setProfile} />;
+  const [intro, setIntro] = useState(true);
+  useEffect(() => {
+    const t = setTimeout(() => setIntro(false), 2200);
+    return () => clearTimeout(t);
+  }, []);
+  return (
+    <>
+      {profile ? <App profile={profile} /> : <RegisterScreen onDone={setProfile} />}
+      {intro && <IntroSplash />}
+    </>
+  );
+}
+
+/* ============ عناصر الفخامة ============ */
+const PATTERN = "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='40' height='40'><path d='M20 2 L38 20 L20 38 L2 20Z' fill='none' stroke='%23D4AF37' stroke-opacity='0.22'/></svg>\")";
+const PARTICLES = [[8, 20, 3, 0], [18, 70, 2, 1.2], [30, 40, 2.5, 0.6], [52, 15, 2, 2], [66, 60, 3, 0.9], [80, 30, 2, 1.6], [90, 75, 2.5, 0.3], [44, 85, 2, 2.4]];
+
+const FX_CSS = `
+.particle{opacity:.2;animation:twinkle 3s ease-in-out infinite;box-shadow:0 0 8px #F5E08A}
+@keyframes twinkle{0%,100%{opacity:.15;transform:scale(.8)}50%{opacity:.95;transform:scale(1.3)}}
+.sail{animation:sail 16s linear infinite}
+@keyframes sail{from{transform:translateX(-50px)}to{transform:translateX(420px)}}
+.halo{animation:spin 24s linear infinite;border-style:dashed}
+@keyframes spin{to{transform:rotate(360deg)}}
+.holo{background:linear-gradient(120deg,rgba(255,0,128,.15),rgba(0,255,255,.15),rgba(255,255,0,.15),rgba(128,0,255,.15));background-size:300% 300%;mix-blend-mode:overlay;animation:holoMove 6s linear infinite}
+@keyframes holoMove{from{background-position:0% 50%}to{background-position:100% 50%}}
+.item-card{transition:all .3s ease}
+.item-card:hover{transform:translateY(-2px);box-shadow:0 0 30px rgba(212,175,55,.2);border-color:rgba(212,175,55,.5)}
+.intro-out{animation:introOut .5s ease 1.8s forwards}
+@keyframes introOut{to{opacity:0;visibility:hidden}}
+.intro-ship{animation:shipIn 1.2s ease both}
+@keyframes shipIn{from{opacity:0;transform:translateY(30px) scale(.8)}to{opacity:1;transform:none}}
+`;
+
+function GoldParticles() {
+  return (
+    <div className="pointer-events-none absolute inset-0 overflow-hidden">
+      {PARTICLES.map(([x, y, s, d], i) => (
+        <span key={i} className="particle absolute rounded-full bg-[#F5E08A]" style={{ left: `${x}%`, top: `${y}%`, width: s * 2, height: s * 2, animationDelay: `${d}s` }} />
+      ))}
+    </div>
+  );
+}
+
+function SailBoat() {
+  return (
+    <div className="sail absolute bottom-2 left-0 pointer-events-none">
+      <svg width="34" height="22" viewBox="0 0 34 22">
+        <path d="M16 2 L30 16 L16 16Z" fill="#D4AF37" />
+        <path d="M14 4 L4 16 L14 16Z" fill="#F5E08A" fillOpacity=".8" />
+        <path d="M2 18 H32 L28 21 H6Z" fill="#A8851E" />
+      </svg>
+    </div>
+  );
+}
+
+function IntroSplash() {
+  return (
+    <div className="intro-out fixed inset-0 z-[100] bg-[#0A0A0A] flex flex-col items-center justify-center">
+      <Ship className="text-[#D4AF37] intro-ship drop-shadow-[0_0_25px_rgba(212,175,55,.6)]" size={80} />
+      <h1 className="gold-text font-black text-3xl mt-6 fade-up">تاتينيك</h1>
+      <p className="text-white/50 text-xs mt-2 fade-up">تجربة نيلية راقية</p>
+    </div>
+  );
 }
