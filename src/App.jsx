@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Ship, Sparkles, Send, Bell, Receipt, Lock, Star, Plus, Minus, Home, MessageCircle, ShoppingBag, X, Crown, Sunrise, Sunset, Moon } from "lucide-react";
+import { Ship, Sparkles, Send, Bell, Receipt, Lock, Star, Plus, Minus, Home, MessageCircle, ShoppingBag, X, Crown, Sunrise, Sunset, Moon, CreditCard } from "lucide-react";
 
 /* ============ البيانات ============ */
 const MINYA = { lat: 28.11, lon: 30.75 };
@@ -189,6 +189,9 @@ export default function App() {
   const [vaultOpen, setVaultOpen] = useState(false);
   const [toast, setToast] = useState("");
   const [afterMsg, setAfterMsg] = useState("");
+  const [card, setCard] = useState(null);
+  const [stats, setStats] = useState({ visits: 0, orders: 0, spent: 0 });
+  const addItems = (list) => setCart((c) => { const n = { ...c }; list.forEach(({ id, q }) => { n[id] = (n[id] || 0) + q; }); return n; });
   const [showCart, setShowCart] = useState(false);
   const [split, setSplit] = useState(1);
 
@@ -222,6 +225,7 @@ export default function App() {
   const total = cartItems.reduce((s, i) => s + i.price * i.q, 0);
   const submit = () => {
     setPoints((p) => p + Math.round(total / 10));
+    if (card) setStats((s) => ({ visits: s.visits + 1, orders: s.orders + count, spent: s.spent + total }));
     setCart({});
     setShowCart(false);
     notify("تم إرسال طلبك للمطبخ ✨ وكسبت نقاط جديدة");
@@ -301,7 +305,14 @@ export default function App() {
           </div>
         )}
 
-        {tab === "chat" && <ChatScreen ctx={{ temp, date: now, points }} />}
+        {tab === "chat" && <ChatScreen ctx={{ temp, date: now, points }} allItems={allItems} addItems={addItems} />}
+        {tab === "card" && (
+          <CardScreen
+            card={card}
+            stats={stats}
+            onIssue={(name) => setCard({ name, number: genNumber(), issued: new Date().toLocaleDateString("ar-EG") })}
+          />
+        )}
 
         {tab === "vault" && (
           <div className="px-5 pt-8 fade-up">
@@ -348,6 +359,7 @@ export default function App() {
 
         <nav className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-md glass backdrop-blur-xl flex justify-around py-3 z-40">
           <NavBtn icon={Home} label="الرئيسية" active={tab === "home"} onClick={() => setTab("home")} />
+          <NavBtn icon={CreditCard} label="بطاقتي" active={tab === "card"} onClick={() => setTab("card")} />
           <NavBtn icon={Lock} label="الخزنة" active={tab === "vault"} onClick={() => setTab("vault")} />
           <NavBtn icon={MessageCircle} label="المضيف" active={tab === "chat"} onClick={() => setTab("chat")} />
         </nav>
@@ -381,25 +393,197 @@ export default function App() {
   );
 }
 
+/* ============ البطاقات ============ */
+const CARD_TIERS = [
+  { name: "VIP", min: 0, grad: "from-[#3a2a00] via-[#D4AF37] to-[#5c4500]" },
+  { name: "ذهبي", min: 1000, grad: "from-[#fff1b3] via-[#D4AF37] to-[#8a6d12]" },
+  { name: "بلاتيني", min: 3000, grad: "from-[#f4f4f2] via-[#9aa7b4] to-[#2d3440]" },
+];
+const cardTierOf = (spent) => CARD_TIERS.reduce((a, t, i) => (spent >= t.min ? i : a), 0);
+const genNumber = () => Array.from({ length: 4 }, () => String(Math.floor(1000 + Math.random() * 9000))).join(" ");
+const SHEEN_CSS = `.sheen{background:linear-gradient(115deg,transparent 30%,rgba(255,255,255,.45) 50%,transparent 70%);background-size:250% 100%;animation:sheen 3.5s linear infinite}@keyframes sheen{from{background-position:150% 0}to{background-position:-150% 0}}`;
+
+function Stat({ label, value }) {
+  return (
+    <div className="glass rounded-2xl p-3 text-center">
+      <p className="text-[10px] text-white/50">{label}</p>
+      <p className="font-black text-[#D4AF37] mt-1">{value}</p>
+    </div>
+  );
+}
+
+function CardScreen({ card, onIssue, stats }) {
+  const [name, setName] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [progress, setProgress] = useState(0);
+
+  useEffect(() => {
+    if (!busy) return;
+    const start = Date.now();
+    const id = setInterval(() => {
+      const p = Math.min(100, ((Date.now() - start) / 5000) * 100);
+      setProgress(p);
+      if (p >= 100) {
+        clearInterval(id);
+        setBusy(false);
+        onIssue(name.trim());
+      }
+    }, 50);
+    return () => clearInterval(id);
+  }, [busy]);
+
+  const tierIdx = cardTierOf(stats.spent);
+  const tier = CARD_TIERS[tierIdx];
+  const next = CARD_TIERS[tierIdx + 1];
+
+  return (
+    <div className="px-5 pt-8 fade-up">
+      <style>{SHEEN_CSS}</style>
+      <div className="flex items-center gap-2 mb-5">
+        <CreditCard className="text-[#D4AF37]" size={20} />
+        <h2 className="text-xl font-black gold-text">بطاقتك</h2>
+      </div>
+
+      {!card && !busy && (
+        <div className="glass rounded-3xl p-6 text-center">
+          <p className="text-sm text-white/70 mb-4 leading-relaxed">اكتب اسمك وهنطبعلك بطاقة VIP خاصة بيك في ثواني</p>
+          <input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="اسمك"
+            className="w-full bg-transparent border border-[#D4AF37]/30 rounded-xl px-4 py-3 outline-none text-center mb-4"
+          />
+          <button
+            disabled={name.trim().length < 2}
+            onClick={() => { setProgress(0); setBusy(true); }}
+            className="gold-btn w-full rounded-xl py-3 font-bold disabled:opacity-40 active:scale-95 transition"
+          >
+            اصنع بطاقتي
+          </button>
+        </div>
+      )}
+
+      {busy && (
+        <div className="glass rounded-3xl p-6 text-center">
+          <div className="sheen rounded-2xl h-40 mb-5 bg-gradient-to-br from-[#1a1400] to-[#0A0A0A]" />
+          <p className="font-bold mb-3">جاري طباعة بطاقتك...</p>
+          <div className="h-2 rounded-full bg-white/10 overflow-hidden">
+            <div className="h-full gold-btn" style={{ width: `${progress}%` }} />
+          </div>
+        </div>
+      )}
+
+      {card && !busy && (
+        <>
+          <div className={`relative w-full aspect-[1.6] rounded-3xl p-5 bg-gradient-to-br ${tier.grad} shadow-[0_20px_60px_rgba(212,175,55,.25)] overflow-hidden fade-up`}>
+            <div className="sheen absolute inset-0 opacity-70" />
+            <div className="relative flex justify-between items-start text-black/80">
+              <span className="font-black">تاتينيك</span>
+              <Crown size={22} />
+            </div>
+            <div className="relative w-11 h-8 rounded-md bg-gradient-to-br from-[#F5E08A] to-[#A8851E] mt-6" />
+            <p dir="ltr" className="relative font-mono tracking-[0.18em] text-black/80 mt-4">{card.number}</p>
+            <div className="relative flex justify-between items-end mt-4 text-black">
+              <div><p className="text-[10px] opacity-70">العضو</p><p className="font-black">{card.name}</p></div>
+              <div className="text-left"><p className="text-[10px] opacity-70">المستوى</p><p className="font-black">{tier.name}</p></div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-3 gap-3 mt-5">
+            <Stat label="الزيارات" value={stats.visits} />
+            <Stat label="الطلبات" value={stats.orders} />
+            <Stat label="إجمالي الإنفاق" value={`${stats.spent} ج.م`} />
+          </div>
+
+          <div className="glass rounded-2xl p-4 mt-4">
+            <p className="text-sm mb-2">
+              {next ? `باقي ${next.min - stats.spent} ج.م للوصول لمستوى ${next.name}` : "وصلت لأعلى مستوى، مبروك يا باشا 👑"}
+            </p>
+            <div className="h-2 rounded-full bg-white/10 overflow-hidden">
+              <div className="h-full gold-btn" style={{ width: `${next ? Math.min(100, (stats.spent / next.min) * 100) : 100}%` }} />
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 /* ============ المضيف ============ */
-function ChatScreen({ ctx }) {
-  const [msgs, setMsgs] = useState([{ from: "bot", text: "أهلاً بيك في تاتينيك. قولّي مزاجك أو اسألني عن أي حاجة، وأنا معاك." }]);
+const YES_RE = /^(أيوه|ايوه|اه|آه|تمام|موافق|ماشي|أكيد|اوكي|ok)/;
+const NO_RE = /^(لا|لأ|مش|الغي|ألغي|اقفل)/;
+const ORDER_RE = /عايز|عاوز|هات|اطلب|ضيف|أخد|اخد|ابعت|عايزة/;
+const FAST_RE = /بسرعة|على طول|حالاً|حالا|مستعجل/;
+const JOKE_RE = /نكتة|اضحكني|هزار|اهزر/;
+const JOKES = [
+  "ليه القهوة ما بتتخانقش مع الشاي؟ عشان الاتنين بيفهموا بعض 😄",
+  "واحد سألني: أحسن مشروب للكورنيش إيه؟ قلتله: اللي ما يقعش في النيل ☕",
+  "أحلى حاجة في الغروب إنه بيخلّص من غير ما تحسب الساعة 😌",
+  "الكوكتيل بيدي إحساس إنك سافرت، بس من غير تذكرة ولا زحمة 🥂",
+];
+
+function findItems(text, allItems) {
+  const hits = [];
+  allItems.forEach((it) => {
+    const first = it.name.split(" ")[0];
+    if (text.includes(it.name) || (first.length > 3 && text.includes(first))) hits.push(it.id);
+  });
+  return [...new Set(hits)];
+}
+
+function ChatScreen({ ctx, allItems, addItems }) {
+  const [msgs, setMsgs] = useState([{ from: "bot", text: "أهلاً بيك في تاتينيك! قولّي عايز تشرب إيه، أو احكيلي نكتة لو زهقت 😄" }]);
   const [input, setInput] = useState("");
   const [typing, setTyping] = useState(false);
+  const [pending, setPending] = useState(null);
+
+  const say = (text) => {
+    setTyping(true);
+    setTimeout(() => {
+      setMsgs((x) => [...x, { from: "bot", text }]);
+      setTyping(false);
+    }, 800);
+  };
+  const nameOf = (id) => allItems.find((i) => i.id === id)?.name;
+  const summary = (list) => list.map((i) => `${i.q} × ${nameOf(i.id)}`).join("، ");
+
+  const handle = (m) => {
+    if (pending) {
+      if (YES_RE.test(m)) {
+        addItems(pending);
+        setPending(null);
+        return say(`تمام، ضفت ${summary(pending)} للسلة. تحب تضيف حاجة تانية؟ 🥂`);
+      }
+      if (NO_RE.test(m)) {
+        setPending(null);
+        return say("ولا يهمك، لغيت الطلب. تحب تشوف حاجة تانية؟");
+      }
+    }
+    if (JOKE_RE.test(m)) return say(JOKES[Math.floor(Math.random() * JOKES.length)]);
+    if (ORDER_RE.test(m)) {
+      const ids = findItems(m, allItems);
+      if (!ids.length) return say("قولّي اسم المشروب أو الحلى من المنيو بالظبط، عشان أضيفه صح ✍️");
+      const q = Math.min(20, Number((m.match(/\d+/) || ["1"])[0]));
+      const list = ids.map((id) => ({ id, q }));
+      if (FAST_RE.test(m)) {
+        addItems(list);
+        return say(`حاضر بسرعة ⚡ ضفت ${summary(list)} للسلة.`);
+      }
+      setPending(list);
+      return say(`تأكيد: ${summary(list)}. أضيفهم للسلة؟ (أيوه / لا)`);
+    }
+    return say(concierge(m, ctx));
+  };
 
   const send = (text) => {
     const m = (text ?? input).trim();
     if (!m || typing) return;
     setMsgs((x) => [...x, { from: "user", text: m }]);
     setInput("");
-    setTyping(true);
-    setTimeout(() => {
-      setMsgs((x) => [...x, { from: "bot", text: concierge(m, ctx) }]);
-      setTyping(false);
-    }, 900);
+    handle(m);
   };
 
-  const chips = ["أنا تعبان", "أنا مبسوط", "الجو حر", "عايز حاجة حلوة", "امتى الغروب؟", "نقاطي كام؟"];
+  const chips = ["عايز أشرب حاجة", "قولي نكتة", "أنا تعبان", "امتى الغروب؟", "نقاطي كام؟"];
 
   return (
     <div className="px-5 pt-8 flex flex-col h-[calc(100vh-120px)] fade-up">
