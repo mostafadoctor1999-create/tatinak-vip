@@ -3,6 +3,8 @@ import { Ship, Sparkles, Send, Bell, Receipt, Lock, Star, Plus, Minus, Home, Mes
 
 /* ============ البيانات ============ */
 const MINYA = { lat: 28.11, lon: 30.75 };
+const GEO_GATE = true; // true = الموقع بيفتح بس لما العميل يكون قريب من السفينة
+const CAFE_RADIUS = 300; // بالمتر
 const HERO_IMAGE = ""; // ضع هنا رابط صورة حقيقية للمكان (من صاحب المطعم) وهتظهر خلفية للرئيسية
 const TABLE = "طاولة النيل 04";
 const VAULT_PIN = "1234"; // تجريبي
@@ -196,7 +198,7 @@ function App({ profile }) {
   const [afterMsg, setAfterMsg] = useState("");
   const [card, setCard] = useState(null);
   const [offersOn, setOffersOn] = useState(true);
-  const [stats, setStats] = useState({ visits: 0, orders: 0, spent: 0 });
+  const [stats, setStats] = useState({ visits: 0, orders: 0, spent: 0, lastVisit: null });
   const addItems = (list) => setCart((c) => { const n = { ...c }; list.forEach(({ id, q }) => { n[id] = (n[id] || 0) + q; }); return n; });
   const [showCart, setShowCart] = useState(false);
   const [split, setSplit] = useState(1);
@@ -231,10 +233,12 @@ function App({ profile }) {
   const total = cartItems.reduce((s, i) => s + i.price * i.q, 0);
   const submit = () => {
     setPoints((p) => p + Math.round(total / 10));
-    if (card) setStats((s) => ({ visits: s.visits + 1, orders: s.orders + count, spent: s.spent + total }));
+    if (card) setStats((s) => ({ ...s, visits: s.visits + 1, orders: s.orders + count, spent: s.spent + total }));
+    setStats((s) => ({ ...s, lastVisit: Date.now() }));
     setCart({});
     setShowCart(false);
     notify("تم إرسال طلبك للمطبخ ✨ وكسبت نقاط جديدة");
+    localPush("طلبك في المطبخ ✨", "هنبلغك لما يجهز");
     setAfterMsg("شكراً لزيارتك على السفينة. نتمنى إن الطلب يكون على ذوقك، وفي زيارتك الجاية هنجهزلك تشكيلة تناسبك.");
   };
 
@@ -270,7 +274,7 @@ function App({ profile }) {
                 </div>
               </div>
 
-              <RadarCard />
+              <RadarCard lastVisit={stats.lastVisit} />
               <OffersBox profile={profile} stats={stats} enabled={offersOn} setEnabled={setOffersOn} />
               {/* المستوى والنقاط */}
               <div className="glass rounded-2xl p-4 mb-4">
@@ -303,10 +307,10 @@ function App({ profile }) {
               </div>
 
               <div className="grid grid-cols-2 gap-3">
-                <button onClick={() => notify("تم إبلاغ النادل 🛎️")} className="glass rounded-2xl py-4 flex flex-col items-center gap-2 active:scale-95 transition">
+                <button onClick={() => { notify("تم إبلاغ النادل 🛎️"); localPush("النادل جاي 🛎️", "هيوصلك دلوقتي"); }} className="glass rounded-2xl py-4 flex flex-col items-center gap-2 active:scale-95 transition">
                   <Bell className="text-[#D4AF37]" size={22} /><span className="text-sm font-semibold">اطلب النادل</span>
                 </button>
-                <button onClick={() => notify("تم طلب الفاتورة 🧾")} className="glass rounded-2xl py-4 flex flex-col items-center gap-2 active:scale-95 transition">
+                <button onClick={() => { notify("تم طلب الفاتورة 🧾"); localPush("الفاتورة جاية 🧾", "الكاشير هيجهزهالك دلوقتي"); }} className="glass rounded-2xl py-4 flex flex-col items-center gap-2 active:scale-95 transition">
                   <Receipt className="text-[#D4AF37]" size={22} /><span className="text-sm font-semibold">اطلب الفاتورة</span>
                 </button>
               </div>
@@ -687,6 +691,20 @@ function RegisterScreen({ onDone }) {
     if (name.trim().length < 2) return setErr("اكتب اسمك من فضلك");
     if (!/^01[0125]\d{8}$/.test(phone)) return setErr("اكتب رقم موبايل مصري صحيح (11 رقم)");
     if (!agree) return setErr("لازم توافق عشان نقدر نبعتلك العروض");
+    // 1) رسالة واتساب ترحيبية من السيرفر (بعد الموافقة)
+    fetch("/api/welcome", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: name.trim(), phone, consent: true }),
+    }).catch(() => {});
+    // 2) إشعار ترحيبي على الجهاز (لو العميل وافق)
+    if ("Notification" in window && Notification.permission !== "denied") {
+      Notification.requestPermission()
+        .then((p) => {
+          if (p === "granted") new Notification("أهلاً بيك في تاتينيك ⛵", { body: `يا ${name.trim()}، عرضك الترحيبي استناك في زيارتك الجاية.` });
+        })
+        .catch(() => {});
+    }
     onDone({ name: name.trim(), phone, consent: true, at: new Date().toISOString() });
   };
 
@@ -725,7 +743,7 @@ function distanceM(lat1, lon1, lat2, lon2) {
   return 2 * R * Math.asin(Math.sqrt(a));
 }
 
-function RadarCard() {
+function RadarCard({ lastVisit }) {
   const [state, setState] = useState("idle");
   const [dist, setDist] = useState(null);
 
@@ -747,7 +765,9 @@ function RadarCard() {
   const msg = {
     idle: "فعّل الرادار وشوف إذا كنت قريب من السفينة، وهيفتحلك عرض خاص.",
     loading: "بندوّر عليك...",
-    near: `إنت قريب مننا (${dist} متر)! اطلب دلوقتي وخد خصم 10% على أول طلب.`,
+    near: lastVisit && Date.now() - lastVisit > 7 * 86400000
+      ? `أهلاً! إنت قريب مننا، اتفضل خد خصم 20% دلوقتي وخلاص.`
+      : `أهلاً بيك! إنت قريب مننا (${dist} متر)، اتفضل.`,
     far: `إنت بعيد شوية (${dist} متر). قرّب من النيل وعرضك هيفتح.`,
     denied: "محتاجين إذنك للموقع عشان الرادار يشتغل.",
     nogeo: "الجهاز ده ما بيدعمش تحديد الموقع.",
@@ -806,16 +826,68 @@ function OffersBox({ profile, stats, enabled, setEnabled }) {
 export default function Root() {
   const [profile, setProfile] = useState(null);
   const [intro, setIntro] = useState(true);
+  const [geo, setGeo] = useState("checking");
+
   useEffect(() => {
     const t = setTimeout(() => setIntro(false), 2200);
     return () => clearTimeout(t);
   }, []);
+
+  useEffect(() => {
+    if (GEO_GATE) checkGeo(setGeo);
+    else setGeo("near");
+  }, []);
+
+  const blocked = geo !== "near";
   return (
     <>
-      {profile ? <App profile={profile} /> : <RegisterScreen onDone={setProfile} />}
+      {blocked ? (
+        <GeoGate state={geo} onRetry={() => { setGeo("checking"); checkGeo(setGeo); }} />
+      ) : profile ? (
+        <App profile={profile} />
+      ) : (
+        <RegisterScreen onDone={setProfile} />
+      )}
       {intro && <IntroSplash />}
     </>
   );
+}
+
+function checkGeo(set) {
+  if (!navigator.geolocation) return set("denied");
+  navigator.geolocation.getCurrentPosition(
+    (p) => set(distanceM(p.coords.latitude, p.coords.longitude, MINYA.lat, MINYA.lon) <= CAFE_RADIUS ? "near" : "far"),
+    () => set("denied"),
+    { enableHighAccuracy: false, timeout: 10000, maximumAge: 60000 }
+  );
+}
+
+function GeoGate({ state, onRetry }) {
+  const text = {
+    checking: "بنتأكد إنك قدام السفينة...",
+    far: "الصفحة بتفتح لما تكون قدام السفينة. قرّب من النيل وافتح الرابط تاني.",
+    denied: "محتاجين إذنك للموقع عشان نتأكد إنك قدامنا.",
+  }[state];
+  return (
+    <div dir="rtl" className="min-h-screen max-w-md mx-auto bg-[#0A0A0A] text-white flex flex-col items-center justify-center px-8 text-center">
+      <style>{FX_CSS}</style>
+      <Ship className="text-[#D4AF37] bob mb-6" size={56} />
+      <h1 className="gold-text font-black text-xl mb-3">تاتينيك</h1>
+      <p className="text-sm text-white/70 leading-relaxed">{text}</p>
+      {state !== "checking" && (
+        <button onClick={onRetry} className="gold-btn rounded-xl px-6 py-3 font-bold mt-6 active:scale-95 transition">جرّب تاني</button>
+      )}
+    </div>
+  );
+}
+
+/* ============ إشعارات الجهاز ============ */
+function localPush(title, body) {
+  if (!("Notification" in window)) return;
+  const send = () => new Notification(title, { body });
+  if (Notification.permission === "granted") send();
+  else if (Notification.permission !== "denied")
+    Notification.requestPermission().then((p) => p === "granted" && send()).catch(() => {});
 }
 
 /* ============ عناصر الفخامة ============ */
