@@ -1,9 +1,10 @@
 import { useState, useEffect } from "react";
-import { Ship, Sparkles, Send, Bell, Receipt, Lock, Star, Plus, Minus, Home, MessageCircle, ShoppingBag, X, Crown, Sunrise, Sunset, Moon, CreditCard } from "lucide-react";
+import { Ship, Sparkles, Send, Bell, Receipt, Lock, Star, Plus, Minus, Home, MessageCircle, ShoppingBag, X, Crown, Sunrise, Sunset, Moon, CreditCard, Coffee, CupSoda, Pizza, Sandwich, Salad, Soup, Beef, Milk, Citrus, Wine, GlassWater, Utensils, Flame, Cookie, Donut, Leaf, Egg, CakeSlice, Cake } from "lucide-react";
+import { CATS, ALL_MENU } from "./menu.js";
 
 /* ============ البيانات ============ */
 const MINYA = { lat: 28.11, lon: 30.75 };
-const GEO_GATE = false; // true = الموقع بيفتح بس لما العميل يكون قريب من السفينة
+const GEO_GATE = true; // true = الموقع بيفتح بس لما العميل يكون قريب من السفينة
 const CAFE_RADIUS = 300; // بالمتر
 const HERO_IMAGE = ""; // ضع هنا رابط صورة حقيقية للمكان (من صاحب المطعم) وهتظهر خلفية للرئيسية
 const TABLE = "طاولة النيل 04";
@@ -197,6 +198,7 @@ function App({ profile }) {
   const [toast, setToast] = useState("");
   const [afterMsg, setAfterMsg] = useState("");
   const [card, setCard] = useState(null);
+  const [cat, setCat] = useState("coffee");
   const [offersOn, setOffersOn] = useState(true);
   const [stats, setStats] = useState({ visits: 0, orders: 0, spent: 0, lastVisit: null });
   const addItems = (list) => setCart((c) => { const n = { ...c }; list.forEach(({ id, q }) => { n[id] = (n[id] || 0) + q; }); return n; });
@@ -215,9 +217,9 @@ function App({ profile }) {
     return periodOf(now) === "morning" ? "morning" : periodOf(now) === "night" ? "night" : "day";
   })();
 
-  const allItems = [...MENU.morning, ...MENU.day, ...MENU.night, ...VAULT];
+  const allItems = [...ALL_MENU, ...VAULT];
   const period = periodOf(now);
-  const items = MENU[period];
+  const items = ALL_MENU.filter((x) => x.cat === cat);
   const tier = tierOf(points);
 
   const notify = (m) => { setToast(m); setTimeout(() => setToast(""), 2400); };
@@ -289,11 +291,20 @@ function App({ profile }) {
 
               {/* القائمة حسب الوقت */}
               <h3 className="text-sm text-white/60 mb-3">
-                {period === "morning" ? "قائمة الصباح" : period === "day" ? "قائمة النهار" : "قائمة الليل"}
+                {CATS.find((c) => c.key === cat)?.label}
               </h3>
+              <div className="flex gap-2 overflow-x-auto pb-3 mb-2">
+                {CATS.map((c) => (
+                  <button key={c.key} onClick={() => setCat(c.key)} className={`whitespace-nowrap rounded-full px-3 py-2 text-xs font-bold flex items-center gap-1 transition active:scale-95 ${cat === c.key ? "gold-btn" : "glass text-white/70"}`}>
+                    <CatIcon name={c.icon} size={14} /> {c.label}
+                  </button>
+                ))}
+              </div>
+              <p className="text-[11px] text-white/40 mb-3">الأسعار بالجنيه · يضاف 12% خدمة</p>
               <div className="flex flex-col gap-3 mb-5">
                 {items.map((item, idx) => (
                   <div key={item.id} className="glass item-card rounded-2xl p-4 flex justify-between items-center fade-up" style={{ animationDelay: `${idx * 90}ms` }}>
+                    <CatIcon name={item.icon} size={18} />
                     <div className="pl-3">
                       <h3 className="font-bold">{item.name}</h3>
                       <p className="text-xs text-white/60 mt-1">{item.desc}</p>
@@ -537,12 +548,13 @@ const JOKES = [
 ];
 
 function findItems(text, allItems) {
-  const hits = [];
-  allItems.forEach((it) => {
-    const first = it.name.split(" ")[0];
-    if (text.includes(it.name) || (first.length > 3 && text.includes(first))) hits.push(it.id);
+  const full = allItems.filter((it) => text.includes(it.base || it.name)).map((it) => it.id);
+  if (full.length) return [...new Set(full)];
+  const alias = allItems.filter((it) => {
+    const w = (it.base || it.name).split(" ")[0];
+    return w.length > 3 && text.includes(w);
   });
-  return [...new Set(hits)];
+  return [...new Set(alias.map((it) => it.id))].slice(0, 5);
 }
 
 function ChatScreen({ ctx, allItems, addItems }) {
@@ -940,5 +952,17 @@ function IntroSplash() {
       <h1 className="gold-text font-black text-3xl mt-6 fade-up">تاتينيك</h1>
       <p className="text-white/50 text-xs mt-2 fade-up">تجربة نيلية راقية</p>
     </div>
+  );
+}
+
+
+/* ============ أيقونات الأصناف ============ */
+const ICON_MAP = { Coffee, CupSoda, Pizza, Sandwich, Salad, Soup, Beef, Milk, Citrus, Wine, GlassWater, Utensils, Flame, Cookie, Donut, Leaf, Egg, CakeSlice, Cake };
+function CatIcon({ name, size = 18 }) {
+  const Ico = ICON_MAP[name] || Utensils;
+  return (
+    <span className="gold-btn w-9 h-9 rounded-full flex items-center justify-center shrink-0 shadow-[0_0_14px_rgba(212,175,55,.35)]">
+      <Ico size={size} />
+    </span>
   );
 }
