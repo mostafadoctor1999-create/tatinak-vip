@@ -1,10 +1,11 @@
 import { useState, useEffect } from "react";
 import { Ship, Sparkles, Send, Bell, Receipt, Lock, Star, Plus, Minus, Home, MessageCircle, ShoppingBag, X, Crown, Sunrise, Sunset, Moon, CreditCard, Coffee, CupSoda, Pizza, Sandwich, Salad, Soup, Beef, Milk, Citrus, Wine, GlassWater, Utensils, Flame, Cookie, Donut, Leaf, Egg, CakeSlice, Cake } from "lucide-react";
 import { CATS, ALL_MENU } from "./menu.js";
+import { SB_READY, sbList, sbInsert, sbSetStatus } from "./supabase.js";
 
 /* ============ البيانات ============ */
 const MINYA = { lat: 28.11, lon: 30.75 };
-const GEO_GATE = false; // true = الموقع بيفتح بس لما العميل يكون قريب من السفينة
+const GEO_GATE = true; // true = الموقع بيفتح بس لما العميل يكون قريب من السفينة
 const CAFE_RADIUS = 300; // بالمتر
 const HERO_IMAGE = ""; // ضع هنا رابط صورة حقيقية للمكان (من صاحب المطعم) وهتظهر خلفية للرئيسية
 const TABLE = "طاولة النيل 04";
@@ -199,6 +200,7 @@ function App({ profile }) {
   const [afterMsg, setAfterMsg] = useState("");
   const [card, setCard] = useState(null);
   const [cat, setCat] = useState("coffee");
+  const [wishes, setWishes] = useWishes();
   const [offersOn, setOffersOn] = useState(true);
   const [stats, setStats] = useState({ visits: 0, orders: 0, spent: 0, lastVisit: null });
   const addItems = (list) => setCart((c) => { const n = { ...c }; list.forEach(({ id, q }) => { n[id] = (n[id] || 0) + q; }); return n; });
@@ -276,6 +278,10 @@ function App({ profile }) {
                 </div>
               </div>
 
+              <button onClick={() => setTab("lounge")} className="glass w-full rounded-2xl p-4 mb-4 flex items-center gap-3 active:scale-95 transition">
+                <Sparkles className="text-[#D4AF37]" size={20} />
+                <span className="font-bold">أجواء السهرة · تهنئة لصاحبك</span>
+              </button>
               <RadarCard lastVisit={stats.lastVisit} />
               <OffersBox profile={profile} stats={stats} enabled={offersOn} setEnabled={setOffersOn} />
               {/* المستوى والنقاط */}
@@ -330,6 +336,7 @@ function App({ profile }) {
         )}
 
         {tab === "chat" && <ChatScreen ctx={{ temp, date: now, points }} allItems={allItems} addItems={addItems} />}
+        {tab === "lounge" && <LoungeScreen profile={profile} wishes={wishes} setWishes={setWishes} />}
         {tab === "card" && (
           <CardScreen
             card={card}
@@ -839,6 +846,9 @@ export default function Root() {
   const [profile, setProfile] = useState(null);
   const [intro, setIntro] = useState(true);
   const [geo, setGeo] = useState("checking");
+  useEffect(() => {
+    if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});
+  }, []);
 
   useEffect(() => {
     const t = setTimeout(() => setIntro(false), 2200);
@@ -850,6 +860,9 @@ export default function Root() {
     else setGeo("near");
   }, []);
 
+  const route = new URLSearchParams(window.location.search).get("view");
+  if (route === "screen") return <ScreenView />;
+  if (route === "admin") return <AdminView />;
   const blocked = geo !== "near";
   return (
     <>
@@ -895,11 +908,18 @@ function GeoGate({ state, onRetry }) {
 
 /* ============ إشعارات الجهاز ============ */
 function localPush(title, body) {
-  if (!("Notification" in window)) return;
-  const send = () => new Notification(title, { body });
-  if (Notification.permission === "granted") send();
-  else if (Notification.permission !== "denied")
-    Notification.requestPermission().then((p) => p === "granted" && send()).catch(() => {});
+  if (!("Notification" in window) || Notification.permission === "denied") return;
+  const show = () => {
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.ready
+        .then((reg) => reg.showNotification(title, { body }))
+        .catch(() => {});
+    } else {
+      try { new Notification(title, { body }); } catch (err) {}
+    }
+  };
+  if (Notification.permission === "granted") show();
+  else Notification.requestPermission().then((p) => p === "granted" && show()).catch(() => {});
 }
 
 /* ============ عناصر الفخامة ============ */
@@ -964,5 +984,151 @@ function CatIcon({ name, size = 18 }) {
     <span className="gold-btn w-9 h-9 rounded-full flex items-center justify-center shrink-0 shadow-[0_0_14px_rgba(212,175,55,.35)]">
       <Ico size={size} />
     </span>
+  );
+}
+
+
+/* ============ أجواء السهرة: تهنئة الأصدقاء ============ */
+const WISHES_KEY = "tatinak-wishes";
+const ADMIN_PIN = "9999"; // تجريبي: غيّره قبل التشغيل
+const BLOCKED_WORDS = []; // ضيف هنا الكلمات الممنوعة
+
+function loadWishes() {
+  try { return JSON.parse(localStorage.getItem(WISHES_KEY) || "[]"); } catch (e) { return []; }
+}
+function saveWishes(list) {
+  try { localStorage.setItem(WISHES_KEY, JSON.stringify(list)); } catch (e) {}
+}
+const fromRow = (r) => ({ id: r.id, from: r.from_name, to: r.to_name, text: r.message, status: r.status });
+
+function useWishes() {
+  const [wishes, setLocal] = useState(loadWishes);
+
+  useEffect(() => { if (!SB_READY) saveWishes(wishes); }, [wishes]);
+
+  useEffect(() => {
+    if (SB_READY) {
+      const pull = () => sbList().then((rows) => setLocal(rows.map(fromRow))).catch(() => {});
+      pull();
+      const t = setInterval(pull, 4000);
+      return () => clearInterval(t);
+    }
+    const on = (e) => { if (e.key === WISHES_KEY) setLocal(loadWishes()); };
+    window.addEventListener("storage", on);
+    return () => window.removeEventListener("storage", on);
+  }, []);
+
+  const setWishes = (next) => {
+    if (SB_READY) {
+      next.forEach((w) => {
+        const old = wishes.find((p) => p.id === w.id);
+        if (!old) sbInsert(w).catch(() => {});
+        else if (old.status !== w.status) sbSetStatus(w.id, w.status).catch(() => {});
+      });
+    }
+    setLocal(next);
+  };
+  return [wishes, setWishes];
+}
+const isClean = (t) => !/\d{6,}/.test(t) && !BLOCKED_WORDS.some((w) => t.includes(w));
+
+function LoungeScreen({ profile, wishes, setWishes }) {
+  const [friend, setFriend] = useState("");
+  const [msg, setMsg] = useState("");
+  const [err, setErr] = useState("");
+  const [done, setDone] = useState(false);
+
+  const submit = () => {
+    if (friend.trim().length < 2) return setErr("اكتب اسم صاحبك");
+    if (msg.trim().length < 5) return setErr("اكتب رسالة قصيرة");
+    if (!isClean(msg) || !isClean(friend)) return setErr("في كلام مش مسموح، عدّل الرسالة");
+    setWishes([...wishes, { id: Date.now(), from: profile.name, to: friend.trim(), text: msg.trim(), status: "pending" }]);
+    setFriend(""); setMsg(""); setErr(""); setDone(true);
+  };
+
+  return (
+    <div className="px-5 pt-8 fade-up">
+      <style>{FX_CSS}</style>
+      <div className="flex items-center gap-2 mb-2"><Sparkles className="text-[#D4AF37]" size={20} /><h2 className="text-xl font-black gold-text">أجواء السهرة</h2></div>
+      <p className="text-sm text-white/60 mb-5 leading-relaxed">ابعت تهنئة لصاحبك، وهتظهر على شاشة الكافيه بعد ما الإدارة توافق عليها.</p>
+      <div className="glass rounded-3xl p-5">
+        <label className="text-xs text-white/60">اسم صاحبك</label>
+        <input value={friend} onChange={(e) => setFriend(e.target.value)} maxLength={20} className="w-full bg-transparent border border-[#D4AF37]/30 rounded-xl px-4 py-3 outline-none mt-1 mb-4" />
+        <label className="text-xs text-white/60">التهنئة</label>
+        <textarea value={msg} onChange={(e) => setMsg(e.target.value)} maxLength={120} rows={3} className="w-full bg-transparent border border-[#D4AF37]/30 rounded-xl px-4 py-3 outline-none mt-1 resize-none" />
+        <p className="text-[10px] text-white/40 text-left mb-2">{msg.length}/120</p>
+        {err && <p className="text-xs text-red-400 mb-2">{err}</p>}
+        {done && <p className="text-xs text-[#D4AF37] mb-2">اتبعتت للإدارة، هتظهر على الشاشة بعد الموافقة ✨</p>}
+        <button onClick={submit} className="gold-btn w-full rounded-xl py-3 font-bold active:scale-95 transition">ابعت التهنئة</button>
+      </div>
+    </div>
+  );
+}
+
+function AdminView() {
+  const [wishes, setWishes] = useWishes();
+  const [ok, setOk] = useState(false);
+  const [pin, setPin] = useState("");
+
+  if (!ok) {
+    return (
+      <div dir="rtl" className="min-h-screen bg-[#0A0A0A] text-white flex flex-col items-center justify-center gap-4 px-8">
+        <Lock className="text-[#D4AF37]" size={36} />
+        <input type="password" inputMode="numeric" value={pin} onChange={(e) => setPin(e.target.value)} placeholder="رمز الإدارة" className="bg-transparent border border-[#D4AF37]/30 rounded-xl px-4 py-3 outline-none text-center" />
+        <button onClick={() => (pin === ADMIN_PIN ? setOk(true) : setPin(""))} className="gold-btn rounded-xl px-6 py-3 font-bold">دخول</button>
+      </div>
+    );
+  }
+
+  const setStatus = (id, status) => setWishes(wishes.map((w) => (w.id === id ? { ...w, status } : w)));
+  const pending = wishes.filter((w) => w.status === "pending");
+
+  return (
+    <div dir="rtl" className="min-h-screen bg-[#0A0A0A] text-white max-w-md mx-auto px-5 pt-8 pb-10">
+      <h1 className="gold-text font-black text-xl mb-4">موافقة التهاني</h1>
+      {pending.length === 0 && <p className="text-white/50 text-sm">مفيش تهاني مستنية</p>}
+      {pending.map((w) => (
+        <div key={w.id} className="glass rounded-2xl p-4 mb-3">
+          <p className="text-xs text-white/50">من {w.from} إلى {w.to}</p>
+          <p className="mt-2 text-sm leading-relaxed">{w.text}</p>
+          <div className="flex gap-2 mt-3">
+            <button onClick={() => setStatus(w.id, "approved")} className="gold-btn flex-1 rounded-xl py-2 font-bold">موافقة</button>
+            <button onClick={() => setStatus(w.id, "rejected")} className="glass flex-1 rounded-xl py-2">رفض</button>
+          </div>
+        </div>
+      ))}
+      <p className="text-xs text-white/40 mt-6">شاشة الكافيه: الرابط نفسه بعد ?view=screen</p>
+    </div>
+  );
+}
+
+function ScreenView() {
+  const [wishes] = useWishes();
+  const approved = wishes.filter((w) => w.status === "approved");
+  const [i, setI] = useState(0);
+
+  useEffect(() => {
+    if (approved.length < 2) return;
+    const t = setInterval(() => setI((x) => (x + 1) % approved.length), 8000);
+    return () => clearInterval(t);
+  }, [approved.length]);
+
+  const cur = approved.length ? approved[i % approved.length] : null;
+  return (
+    <div dir="rtl" className="min-h-screen bg-[#0A0A0A] text-white flex flex-col items-center justify-center relative overflow-hidden px-10 text-center">
+      <style>{FX_CSS}</style>
+      <GoldParticles />
+      <Crown className="text-[#D4AF37] mb-6" size={48} />
+      <p className="text-[#D4AF37] text-sm mb-8">تاتينيك · أجواء السهرة</p>
+      {cur ? (
+        <div key={cur.id} className="fade-up">
+          <p className="gold-text font-black text-4xl mb-6">{cur.to}</p>
+          <p className="text-2xl leading-relaxed">{cur.text}</p>
+          <p className="text-sm text-white/50 mt-6">من {cur.from}</p>
+        </div>
+      ) : (
+        <p className="text-white/50">في انتظار أول تهنئة...</p>
+      )}
+    </div>
   );
 }
