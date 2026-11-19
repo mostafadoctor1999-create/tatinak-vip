@@ -3,7 +3,7 @@
 // لحد ما المفتاح يتلصق، الموقع بيشتغل على نفس الجهاز بس.
 
 export const SB_URL = "https://mgcrydqkjzeywagmyeyg.supabase.co";
-export const SB_KEY = "sb_publishable_owffQD06GNFht5omFi7kWg_xoMLF1vS";
+export const SB_KEY = "sb_publishable_xu1PBoMFVJ4CJt5z_tBCOw_gajlydM3";
 export const SB_READY = Boolean(SB_KEY);
 
 const H = { apikey: SB_KEY, "Content-Type": "application/json" };
