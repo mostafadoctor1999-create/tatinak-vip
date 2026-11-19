@@ -5,7 +5,7 @@ import { SB_READY, sbList, sbInsert, sbSetStatus, sbOrder, sbOrders, sbOrderStat
 
 /* ============ البيانات ============ */
 const MINYA = { lat: 28.11, lon: 30.75 };
-const GEO_GATE = true; // true = الموقع بيفتح بس لما العميل يكون قريب من السفينة
+const GEO_GATE = false; // true = الموقع بيفتح بس لما العميل يكون قريب من السفينة
 const CAFE_RADIUS = 300; // بالمتر
 const HERO_IMAGE = ""; // ضع هنا رابط صورة حقيقية للمكان (من صاحب المطعم) وهتظهر خلفية للرئيسية
 const TABLE_NO = new URLSearchParams(window.location.search).get("table") || "04";
