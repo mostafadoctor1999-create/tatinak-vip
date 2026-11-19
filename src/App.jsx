@@ -1,14 +1,15 @@
 import { useState, useEffect } from "react";
 import { Ship, Sparkles, Send, Bell, Receipt, Lock, Star, Plus, Minus, Home, MessageCircle, ShoppingBag, X, Crown, Sunrise, Sunset, Moon, CreditCard, Coffee, CupSoda, Pizza, Sandwich, Salad, Soup, Beef, Milk, Citrus, Wine, GlassWater, Utensils, Flame, Cookie, Donut, Leaf, Egg, CakeSlice, Cake } from "lucide-react";
 import { CATS, ALL_MENU } from "./menu.js";
-import { SB_READY, sbList, sbInsert, sbSetStatus } from "./supabase.js";
+import { SB_READY, sbList, sbInsert, sbSetStatus, sbOrder, sbOrders, sbOrderStatus } from "./supabase.js";
 
 /* ============ البيانات ============ */
 const MINYA = { lat: 28.11, lon: 30.75 };
-const GEO_GATE = false; // false = الموقع بيفتح بس لما العميل يكون قريب من السفينة
+const GEO_GATE = true; // true = الموقع بيفتح بس لما العميل يكون قريب من السفينة
 const CAFE_RADIUS = 300; // بالمتر
 const HERO_IMAGE = ""; // ضع هنا رابط صورة حقيقية للمكان (من صاحب المطعم) وهتظهر خلفية للرئيسية
-const TABLE = "طاولة النيل 04";
+const TABLE_NO = new URLSearchParams(window.location.search).get("table") || "04";
+const TABLE = TABLE_NO === "04" && !new URLSearchParams(window.location.search).get("table") ? "طاولة النيل 04" : `طاولة ${TABLE_NO}`;
 const VAULT_PIN = "1234"; // تجريبي
 const MENU = {
   morning: [
@@ -242,6 +243,7 @@ function App({ profile }) {
     setCart({});
     setShowCart(false);
     notify("تم إرسال طلبك للمطبخ ✨ وكسبت نقاط جديدة");
+    if (SB_READY) sbOrder({ table_no: TABLE_NO, items: cartItems.map((i) => ({ name: i.name, q: i.q, price: i.price })), total, status: "pending" }).catch(() => {});
     localPush("طلبك في المطبخ ✨", "هنبلغك لما يجهز");
     setAfterMsg("شكراً لزيارتك على السفينة. نتمنى إن الطلب يكون على ذوقك، وفي زيارتك الجاية هنجهزلك تشكيلة تناسبك.");
   };
@@ -863,6 +865,8 @@ export default function Root() {
   const route = new URLSearchParams(window.location.search).get("view");
   if (route === "screen") return <ScreenView />;
   if (route === "admin") return <AdminView />;
+  if (route === "waiter") return <StaffView role="waiter" />;
+  if (route === "kitchen") return <StaffView role="kitchen" />;
   const blocked = geo !== "near";
   return (
     <>
@@ -1129,6 +1133,64 @@ function ScreenView() {
       ) : (
         <p className="text-white/50">في انتظار أول تهنئة...</p>
       )}
+    </div>
+  );
+}
+
+
+/* ============ النادل والمطبخ ============ */
+const STAFF_PIN = "2580"; // تجريبي: غيّره
+
+function StaffView({ role }) {
+  const [ok, setOk] = useState(false);
+  const [pin, setPin] = useState("");
+  const [list, setList] = useState([]);
+  const isWaiter = role === "waiter";
+  const status = isWaiter ? "pending" : "confirmed";
+
+  useEffect(() => {
+    if (!ok || !SB_READY) return;
+    const pull = () => sbOrders(status).then(setList).catch(() => {});
+    pull();
+    const t = setInterval(pull, 4000);
+    return () => clearInterval(t);
+  }, [ok]);
+
+  const act = (id) => {
+    sbOrderStatus(id, isWaiter ? "confirmed" : "ready").catch(() => {});
+    setList((l) => l.filter((o) => o.id !== id));
+  };
+
+  if (!ok) {
+    return (
+      <div dir="rtl" className="min-h-screen bg-[#0A0A0A] text-white flex flex-col items-center justify-center gap-4 px-8">
+        <Ship className="text-[#D4AF37]" size={36} />
+        <h1 className="gold-text font-black text-lg">{isWaiter ? "شاشة النادل" : "شاشة المطبخ"}</h1>
+        <input type="password" inputMode="numeric" value={pin} onChange={(e) => setPin(e.target.value)} placeholder="رمز الطاقم" className="bg-transparent border border-[#D4AF37]/30 rounded-xl px-4 py-3 outline-none text-center" />
+        <button onClick={() => (pin === STAFF_PIN ? setOk(true) : setPin(""))} className="gold-btn rounded-xl px-6 py-3 font-bold">دخول</button>
+      </div>
+    );
+  }
+
+  return (
+    <div dir="rtl" className="min-h-screen bg-[#0A0A0A] text-white max-w-md mx-auto px-5 pt-8 pb-10">
+      <h1 className="gold-text font-black text-xl mb-4">{isWaiter ? "طلبات تحتاج تأكيد" : "طلبات للتحضير"}</h1>
+      {!SB_READY && <p className="text-red-400 text-sm">المفتاح مش متوصل بعد</p>}
+      {SB_READY && list.length === 0 && <p className="text-white/50 text-sm">مفيش طلبات دلوقتي</p>}
+      {list.map((o) => (
+        <div key={o.id} className="glass rounded-2xl p-4 mb-3">
+          <div className="flex justify-between items-center">
+            <span className="font-black text-[#D4AF37]">طاولة {o.table_no}</span>
+            <span className="text-sm">{o.total} ج.م</span>
+          </div>
+          <ul className="text-sm mt-2 text-white/80">
+            {(o.items || []).map((i, k) => <li key={k}>{i.q} × {i.name}</li>)}
+          </ul>
+          <button onClick={() => act(o.id)} className="gold-btn w-full rounded-xl py-2 font-bold mt-3 active:scale-95 transition">
+            {isWaiter ? "تأكيد الطلب" : "جاهز"}
+          </button>
+        </div>
+      ))}
     </div>
   );
 }
