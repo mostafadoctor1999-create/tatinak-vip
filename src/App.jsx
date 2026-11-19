@@ -1,11 +1,11 @@
 import { useState, useEffect } from "react";
-import { Ship, Sparkles, Send, Bell, Receipt, Lock, Star, Plus, Minus, Home, MessageCircle, ShoppingBag, X, Crown, Sunrise, Sunset, Moon, CreditCard, Coffee, CupSoda, Pizza, Sandwich, Salad, Soup, Beef, Milk, Citrus, Wine, GlassWater, Utensils, Flame, Cookie, Donut, Leaf, Egg, CakeSlice, Cake } from "lucide-react";
+import { Ship, Sparkles, Send, Bell, Receipt, Lock, Star, Plus, Minus, Home, MessageCircle, ShoppingBag, X, Crown, Sunrise, Sunset, Moon, CreditCard, Coffee, CupSoda, Pizza, Sandwich, Salad, Soup, Beef, Milk, Citrus, Wine, GlassWater, Utensils, Flame, Cookie, Donut, Leaf, Egg, CakeSlice, Cake, Wallet } from "lucide-react";
 import { CATS, ALL_MENU } from "./menu.js";
 import { SB_READY, sbList, sbInsert, sbSetStatus, sbOrder, sbOrders, sbOrderStatus } from "./supabase.js";
 
 /* ============ البيانات ============ */
 const MINYA = { lat: 28.11, lon: 30.75 };
-const GEO_GATE = false; // true = الموقع بيفتح بس لما العميل يكون قريب من السفينة
+const GEO_GATE = true; // true = الموقع بيفتح بس لما العميل يكون قريب من السفينة
 const CAFE_RADIUS = 300; // بالمتر
 const HERO_IMAGE = ""; // ضع هنا رابط صورة حقيقية للمكان (من صاحب المطعم) وهتظهر خلفية للرئيسية
 const TABLE_NO = new URLSearchParams(window.location.search).get("table") || "04";
@@ -243,7 +243,7 @@ function App({ profile }) {
     setCart({});
     setShowCart(false);
     notify("تم إرسال طلبك للمطبخ ✨ وكسبت نقاط جديدة");
-    if (SB_READY) sbOrder({ table_no: TABLE_NO, items: cartItems.map((i) => ({ name: i.name, q: i.q, price: i.price })), total, status: "pending" }).catch(() => {});
+    if (SB_READY) sbOrder({ table_no: TABLE_NO, items: cartItems.map((i) => ({ name: i.name, q: i.q, price: i.price })), total, status: "pending" }).then((r) => { if (!r.ok) notify("فشل إرسال الطلب، كلم النادل"); }).catch(() => notify("فشل إرسال الطلب، كلم النادل"));
     localPush("طلبك في المطبخ ✨", "هنبلغك لما يجهز");
     setAfterMsg("شكراً لزيارتك على السفينة. نتمنى إن الطلب يكون على ذوقك، وفي زيارتك الجاية هنجهزلك تشكيلة تناسبك.");
   };
@@ -867,6 +867,7 @@ export default function Root() {
   if (route === "admin") return <AdminView />;
   if (route === "waiter") return <StaffView role="waiter" />;
   if (route === "kitchen") return <StaffView role="kitchen" />;
+  if (route === "cashier") return <CashierView />;
   const blocked = geo !== "near";
   return (
     <>
@@ -1191,6 +1192,74 @@ function StaffView({ role }) {
           </button>
         </div>
       ))}
+    </div>
+  );
+}
+
+
+/* ============ الكاشير ============ */
+function CashierView() {
+  const [ok, setOk] = useState(false);
+  const [pin, setPin] = useState("");
+  const [list, setList] = useState([]);
+
+  useEffect(() => {
+    if (!ok || !SB_READY) return;
+    const pull = () => sbOrders("ready").then(setList).catch(() => {});
+    pull();
+    const t = setInterval(pull, 4000);
+    return () => clearInterval(t);
+  }, [ok]);
+
+  const groups = list.reduce((g, o) => {
+    (g[o.table_no] = g[o.table_no] || []).push(o);
+    return g;
+  }, {});
+
+  const pay = (table) => {
+    groups[table].forEach((o) => sbOrderStatus(o.id, "paid").catch(() => {}));
+    setList((l) => l.filter((o) => o.table_no !== table));
+  };
+
+  if (!ok) {
+    return (
+      <div dir="rtl" className="min-h-screen bg-[#0A0A0A] text-white flex flex-col items-center justify-center gap-4 px-8">
+        <Wallet className="text-[#D4AF37]" size={36} />
+        <h1 className="gold-text font-black text-lg">شاشة الكاشير</h1>
+        <input type="password" inputMode="numeric" value={pin} onChange={(e) => setPin(e.target.value)} placeholder="رمز الطاقم" className="bg-transparent border border-[#D4AF37]/30 rounded-xl px-4 py-3 outline-none text-center" />
+        <button onClick={() => (pin === STAFF_PIN ? setOk(true) : setPin(""))} className="gold-btn rounded-xl px-6 py-3 font-bold">دخول</button>
+      </div>
+    );
+  }
+
+  return (
+    <div dir="rtl" className="min-h-screen bg-[#0A0A0A] text-white max-w-md mx-auto px-5 pt-8 pb-10">
+      <h1 className="gold-text font-black text-xl mb-4">الفواتير</h1>
+      {!SB_READY && <p className="text-red-400 text-sm">المفتاح مش متوصل بعد</p>}
+      {SB_READY && Object.keys(groups).length === 0 && <p className="text-white/50 text-sm">مفيش طلبات جاهزة للدفع</p>}
+      {Object.keys(groups).map((table) => {
+        const subtotal = groups[table].reduce((s, o) => s + (o.total || 0), 0);
+        const service = Math.round(subtotal * 0.12);
+        return (
+          <div key={table} className="glass rounded-2xl p-4 mb-3">
+            <div className="flex justify-between items-center mb-2">
+              <span className="font-black text-[#D4AF37]">طاولة {table}</span>
+              <span className="text-xs text-white/50">{groups[table].length} طلب</span>
+            </div>
+            {groups[table].map((o) => (
+              <ul key={o.id} className="text-sm text-white/80 mb-1">
+                {(o.items || []).map((i, k) => <li key={k}>{i.q} × {i.name} · {i.price * i.q} ج.م</li>)}
+              </ul>
+            ))}
+            <div className="border-t border-white/10 mt-3 pt-3 text-sm space-y-1">
+              <div className="flex justify-between"><span>الإجمالي</span><span>{subtotal} ج.م</span></div>
+              <div className="flex justify-between text-white/60"><span>خدمة 12%</span><span>{service} ج.م</span></div>
+              <div className="flex justify-between font-black text-[#D4AF37] text-base"><span>المطلوب</span><span>{subtotal + service} ج.م</span></div>
+            </div>
+            <button onClick={() => pay(table)} className="gold-btn w-full rounded-xl py-2 font-bold mt-3 active:scale-95 transition">تم الدفع</button>
+          </div>
+        );
+      })}
     </div>
   );
 }
